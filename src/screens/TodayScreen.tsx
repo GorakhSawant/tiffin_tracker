@@ -10,7 +10,7 @@ import {
   Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import { useRoute } from '@react-navigation/native';
 import { Member, TiffinOrder } from '../types';
 import { TodayScreenRouteProp } from '../types/navigation';
@@ -23,7 +23,7 @@ export default function TodayScreen() {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [memberQuantities, setMemberQuantities] = useState<{ [key: string]: number }>({});
   const [orders, setOrders] = useState<TiffinOrder[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
   const [totalAmount, setTotalAmount] = useState('');
   const [perPersonAmount, setPerPersonAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -40,7 +40,7 @@ export default function TodayScreen() {
 
   useEffect(() => {
     if (editOrder) {
-      setSelectedDate(new Date(editOrder.date));
+      setSelectedDate(startOfDay(new Date(editOrder.date)));
       setSelectedMembers(editOrder.members);
       setTotalAmount(editOrder.totalAmount?.toString() || '');
       setNotes(editOrder.notes || '');
@@ -66,14 +66,33 @@ export default function TodayScreen() {
   };
 
   const loadExistingOrder = () => {
-    const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const existingOrder = orders.find(order => order.date === dateStr);
-    
-    if (existingOrder) {
-      setSelectedMembers(existingOrder.members);
-      setTotalAmount(existingOrder.totalAmount?.toString() || '');
-      setNotes(existingOrder.notes || '');
-    } else {
+    try {
+      if (!selectedDate) {
+        console.warn('Invalid date');
+        return;
+      }
+      
+      const dateStr = format(startOfDay(selectedDate), 'yyyy-MM-dd');
+      const existingOrder = orders.find(order => {
+        try {
+          return format(startOfDay(new Date(order.date)), 'yyyy-MM-dd') === dateStr;
+        } catch (error) {
+          console.warn('Invalid date in order:', order);
+          return false;
+        }
+      });
+      
+      if (existingOrder) {
+        setSelectedMembers(existingOrder.members || []);
+        setTotalAmount(existingOrder.totalAmount?.toString() || '');
+        setNotes(existingOrder.notes || '');
+      } else {
+        setSelectedMembers([]);
+        setTotalAmount('');
+        setNotes('');
+      }
+    } catch (error) {
+      console.warn('Error loading existing order:', error);
       setSelectedMembers([]);
       setTotalAmount('');
       setNotes('');
@@ -166,8 +185,8 @@ export default function TodayScreen() {
       style={styles.container}
     >
       <ScrollView style={styles.scrollView}>
-        <DatePicker 
-          selectedDate={selectedDate} 
+        <DatePicker
+          date={selectedDate}
           onDateChange={setSelectedDate}
         />
 
